@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class ElectricalSynchronisationStorage
 {
-	public PowerTypeCategory TheCategory;
+	public PowerTypeCategory category;
 	public IElectricalNeedUpdate device;
 }
 public static class ElectricalSynchronisation
@@ -16,19 +16,19 @@ public static class ElectricalSynchronisation
 	public static HashSet<IElectricalNeedUpdate> ResistanceChange = new HashSet<IElectricalNeedUpdate>();
 	public static HashSet<IElectricalNeedUpdate> InitialiseResistanceChange = new HashSet<IElectricalNeedUpdate>();
 	public static HashSet<IElectricalNeedUpdate> NUCurrentChange = new HashSet<IElectricalNeedUpdate>();
-	private static bool DeadEndSet = false;
+	private static bool deadEndSet = false;
 	public static DeadEndConnection DeadEnd = new DeadEndConnection(); //so resistance sources coming from itself  like an apc Don't cause loops this is used as coming from and so therefore it is ignored
 
 
-	public static HashSet<IElectricityIO> DirectionWorkOnNextList = new HashSet<IElectricityIO> ();
-	public static HashSet<IElectricityIO> DirectionWorkOnNextListWait = new HashSet<IElectricityIO> ();
+	public static HashSet<IElectricityIO> DirectionWorkOnNextList = new HashSet<IElectricityIO>();
+	public static HashSet<IElectricityIO> DirectionWorkOnNextListWait = new HashSet<IElectricityIO>();
 
-	public static HashSet<KeyValuePair<IElectricityIO,IElectricityIO>> ResistanceWorkOnNextList = new HashSet<KeyValuePair<IElectricityIO,IElectricityIO>> ();
-	public static HashSet<KeyValuePair<IElectricityIO,IElectricityIO>> ResistanceWorkOnNextListWait = new HashSet<KeyValuePair<IElectricityIO,IElectricityIO>> ();
+	public static HashSet<KeyValuePair<IElectricityIO, IElectricityIO>> ResistanceWorkOnNextList = new HashSet<KeyValuePair<IElectricityIO, IElectricityIO>>();
+	public static HashSet<KeyValuePair<IElectricityIO, IElectricityIO>> ResistanceWorkOnNextListWait = new HashSet<KeyValuePair<IElectricityIO, IElectricityIO>>();
 
-	public static int currentTick;
-	public static float tickRateComplete = 1f; //currently set to update every second
-	public static float tickRate;
+	public static int CurrentTick;
+	public static float TickRateComplete = 1f; //currently set to update every second
+	public static float TickRate;
 	private static float tickCount = 0f;
 	private const int Steps = 5;
 
@@ -59,35 +59,36 @@ public static class ElectricalSynchronisation
 	{
 		ElectricalSynchronisationStorage QuickAdd = new ElectricalSynchronisationStorage();
 		QuickAdd.device = Supply;
-		QuickAdd.TheCategory = TheCategory;
+		QuickAdd.category = TheCategory;
 		ToRemove.Enqueue(QuickAdd);
 	}
 
 	public static void DoUpdate()
 	{ //The beating heart
-		if (!DeadEndSet)
+		if (!deadEndSet)
 		{
 			DeadEnd.Categorytype = PowerTypeCategory.DeadEndConnection; //yeah Class stuff
-			DeadEndSet = true;
+			deadEndSet = true;
 		}
 
-		if (tickRate == 0)
+		if (TickRate == 0)
 		{
-			tickRate = tickRateComplete / Steps;
+			TickRate = TickRateComplete / Steps;
 		}
 
 		tickCount += Time.deltaTime;
 
-		if (tickCount > tickRate) {
+		if (tickCount > TickRate)
+		{
 			DoTick();
 			tickCount = 0f;
-			currentTick = ++currentTick % Steps;
+			CurrentTick = ++CurrentTick % Steps;
 		}
 	}
 
 	private static void DoTick()
 	{
-		switch (currentTick)
+		switch (CurrentTick)
 		{
 			case 0: IfStructureChange(); break;
 			case 1: PowerUpdateStructureChangeReact(); break;
@@ -107,10 +108,10 @@ public static class ElectricalSynchronisation
 		while (ToRemove.Count > 0)
 		{
 			var element = ToRemove.Dequeue();
-			if (ALiveSupplies.ContainsKey(element.TheCategory) &&
-				ALiveSupplies[element.TheCategory].Contains(element.device))
+			if (ALiveSupplies.ContainsKey(element.category) &&
+				ALiveSupplies[element.category].Contains(element.device))
 			{
-				ALiveSupplies[element.TheCategory].Remove(element.device);
+				ALiveSupplies[element.category].Remove(element.device);
 			}
 		}
 	}
@@ -263,28 +264,29 @@ public static class ElectricalSynchronisation
 	//		}
 	//	}
 
-	public static void CircuitResistanceLoop(){
-		bool Break = false;
-		//Logger.Log ("CircuitResistanceLoop! ");
-		List<KeyValuePair<IElectricityIO,IElectricityIO>> IterateDirectionWorkOnNextList = new List<KeyValuePair<IElectricityIO,IElectricityIO>> ();
-		while (!Break) {
-
-			IterateDirectionWorkOnNextList = new List<KeyValuePair<IElectricityIO,IElectricityIO>> (ResistanceWorkOnNextList);
+	public static void CircuitResistanceLoop()
+	{
+		do
+		{
+			var IterateDirectionWorkOnNextList = new List<KeyValuePair<IElectricityIO, IElectricityIO>>(ResistanceWorkOnNextList);
 			ResistanceWorkOnNextList.Clear();
-			//Logger.Log (IterateDirectionWorkOnNextList.Count.ToString () + "IterateDirectionWorkOnNextList.Count");
-			for (int i = 0; i < IterateDirectionWorkOnNextList.Count; i++) {
-				IterateDirectionWorkOnNextList [i].Value.ResistancyOutput ( IterateDirectionWorkOnNextList [i].Key.GameObject());
+
+			foreach (var direction in IterateDirectionWorkOnNextList)
+			{
+				direction.Value.ResistancyOutput(direction.Key.GameObject());
 			}
-			if (ResistanceWorkOnNextList.Count <= 0) {
-				IterateDirectionWorkOnNextList = new List<KeyValuePair<IElectricityIO,IElectricityIO>> (ResistanceWorkOnNextListWait);
+
+			if (ResistanceWorkOnNextList.Count <= 0)
+			{
+				IterateDirectionWorkOnNextList = new List<KeyValuePair<IElectricityIO, IElectricityIO>>(ResistanceWorkOnNextListWait);
 				ResistanceWorkOnNextListWait.Clear();
-				for (int i = 0; i < IterateDirectionWorkOnNextList.Count; i++) {
-					IterateDirectionWorkOnNextList [i].Value.ResistancyOutput (IterateDirectionWorkOnNextList [i].Key.GameObject());
+
+				foreach (var direction in IterateDirectionWorkOnNextList)
+				{
+					direction.Value.ResistancyOutput(direction.Key.GameObject());
 				}
 			}
-			if (ResistanceWorkOnNextList.Count <= 0 && ResistanceWorkOnNextListWait.Count <= 0) {
-				Break = true;
-			}
-		}
+
+		} while (ResistanceWorkOnNextList.Count > 0 && ResistanceWorkOnNextListWait.Count > 0);
 	}
 }
