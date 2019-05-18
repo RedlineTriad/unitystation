@@ -50,7 +50,7 @@ public class EmergencyLightAnimator : MonoBehaviour
 		while (isOn)
 		{
 			yield return 0;
-			lightSource.mLightRendererObject.transform.Rotate(0f, 0f, rotateSpeed * Time.deltaTime, Space.World);
+			lightSource.lightRendererObject.transform.Rotate(0f, 0f, rotateSpeed * Time.deltaTime, Space.World);
 			counter += Time.deltaTime;
 			if (counter > animateTime)
 			{

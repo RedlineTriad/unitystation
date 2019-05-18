@@ -4,39 +4,25 @@ using System.Collections.Generic;
 using System.Linq;
 using Light2D;
 using UnityEngine;
-
-// Note: Judging the "lighting" sprite sheet it seems that light source can have many disabled states.
-// At this point i just want to do a basic setup for an obvious extension, so only On / Off states are actually implemented
-// and for other states is just a state and sprite assignment.
-internal enum LightState
-{
-	None = 0,
-
-	On,
-	Off,
-
-	// Placeholder states, i assume naming would change.
-	MissingBulb,
-	Dirty,
-	Broken,
-
-	TypeCount,
-}
+using UnityEngine.Serialization;
 
 public class LightSource : ObjectTrigger
 {
-	private const LightState InitialState = LightState.Off;
-
-	private readonly Dictionary<LightState, Sprite> mSpriteDictionary = new Dictionary<LightState, Sprite>((int)LightState.TypeCount);
-
-	[Header("Generates itself if this is null:")]
-	public GameObject mLightRendererObject;
-	private LightState mState;
-	private SpriteRenderer Renderer;
-	private float fullIntensityVoltage = 240;
+	[Tooltip("Generates itself if null")]
+	[FormerlySerializedAs("mLightRendererObject")]
+	public GameObject lightRendererObject;
+	public APC RelatedAPC;
+	public LightSwitchTrigger RelatedLightSwitchTrigger;
 	public float Resistance = 1200;
-	private bool tempStateCache;
-	private float _intensity;
+	[Tooltip("Leave as (0 0 0 0) if default should be used")]
+	public Color customColor;
+
+	private const float FullIntensityVoltage = 240;
+	private readonly Dictionary<LightState, Sprite> spriteStates = new Dictionary<LightState, Sprite>();
+	private SpriteRenderer Renderer;
+	private bool retrying;
+
+	private float intensity;
 	/// <summary>
 	/// Current intensity of the lights, automatically clamps and updates sprites when set
 	/// </summary>
@@ -44,197 +30,54 @@ public class LightSource : ObjectTrigger
 	{
 		get
 		{
-			return _intensity;
+			return intensity;
 		}
 		set
 		{
 			value = Mathf.Clamp(value, 0, 1);
-			if ( _intensity != value)
-			{
-				_intensity = value;
-				OnIntensityChange();
-			}
+			if (value == intensity) return;
+			intensity = value;
+			OnIntensityChange();
 		}
 	}
 
-	public APC RelatedAPC;
-	public LightSwitchTrigger RelatedLightSwitchTrigger;
-	public Color customColor; //Leave null if you want default light color.
-
-	// For network sync reliability.
-	private bool waitToCheckState;
-
+	private LightState state = LightState.Off;
 	private LightState State
 	{
 		get
 		{
-			return mState;
+			return state;
 		}
-
 		set
 		{
-			if (mState == value)
-				return;
-
-			mState = value;
+			if (state == value) return;
+			state = value;
 
 			OnStateChange(value);
 		}
 	}
-	public override void Trigger(bool iState)
+
+	private bool On
 	{
-		// Leo Note: Some sync magic happening here. Decided not to touch it.
-		tempStateCache = iState;
-
-		if (waitToCheckState)
+		get
 		{
-			return;
+			return State == LightState.On;
 		}
-
-		if (Renderer == null)
+		set
 		{
-			waitToCheckState = true;
-			StartCoroutine(WaitToTryAgain());
-			return;
-		}
-		else
-		{
-			State = iState ? LightState.On : LightState.Off;
-		}
-	}
-
-	public void Received(LightSwitchData Received)
-	{
-		//Logger.Log (Received.LightSwitchTrigger.ToString() + " < LightSwitchTrigger" + Received.RelatedAPC.ToString() + " < APC" + Received.state.ToString() + " < state" );
-		// Leo Note: Some sync magic happening here. Decided not to touch it.
-		tempStateCache = Received.state;
-
-		if (waitToCheckState)
-		{
-			return;
-		}
-		if (Received.LightSwitchTrigger == RelatedLightSwitchTrigger || RelatedLightSwitchTrigger == null) {
-			if (RelatedLightSwitchTrigger == null){
-				RelatedLightSwitchTrigger = Received.LightSwitchTrigger;
-			}
-			if (Received.RelatedAPC != null)
-			{
-				RelatedAPC = Received.RelatedAPC;
-				{
-					if (State == LightState.On)
-					{
-						if (!RelatedAPC.ConnectedSwitchesAndLights[RelatedLightSwitchTrigger].Contains(this))
-						{
-							RelatedAPC.ConnectedSwitchesAndLights[RelatedLightSwitchTrigger].Add(this);
-						}
-
-					}
-				}
-			}
-			else if (RelatedLightSwitchTrigger.SelfPowered){
-				if (State == LightState.On)
-				{
-					if (!RelatedLightSwitchTrigger.SelfPowerLights.Contains(this))
-					{
-						RelatedLightSwitchTrigger.SelfPowerLights.Add(this);
-					}
-
-				}
-			}
-
-			if (Renderer == null)
-			{
-				waitToCheckState = true;
-				StartCoroutine(WaitToTryAgain());
-				return;
-			}
-			else
-			{
-				State = Received.state ? LightState.On : LightState.Off;
-			}
-		}
-
-
-	}
-
-	public void EmergencyLight(LightSwitchData Received)
-	{
-		if (gameObject.tag == "EmergencyLight")
-		{
-			var emergLightAnim = gameObject.GetComponent<EmergencyLightAnimator>();
-			if (emergLightAnim != null)
-			{
-				if (!Received.RelatedAPC.ConnectedEmergencyLights.Contains(emergLightAnim))
-				{
-					Received.RelatedAPC.ConnectedEmergencyLights.Add(emergLightAnim);
-				}
-			}
-		}
-
-	}
-	private void OnIntensityChange()
-	{
-		this.GetComponentInChildren<LightSprite>().Color.a = Intensity;
-	}
-	private void OnStateChange(LightState iValue)
-	{
-		// Assign state appropriate sprite to the LightSourceObject.
-		if (mSpriteDictionary.ContainsKey(iValue))
-		{
-			Renderer.sprite = mSpriteDictionary[iValue];
-		}
-		else if (mSpriteDictionary.Any())
-		{
-			Renderer.sprite = mSpriteDictionary.Values.First();
-		}
-
-		// Switch Light renderer.
-		if (mLightRendererObject != null)
-			mLightRendererObject.SetActive(iValue == LightState.On);
-	}
-
-	public void PowerLightIntensityUpdate(float Voltage)
-	{
-		if (State == LightState.Off)
-		{
-			//RelatedAPC.ListOfLights.Remove(this);
-			//RelatedAPC = null;
-		}
-		else
-		{
-			// Intensity clamped between 0 and 1, and sprite updated automatically with custom get set
-			Intensity = Voltage / fullIntensityVoltage;
+			State = value ? LightState.On : LightState.Off;
 		}
 	}
 
 	private void Awake()
 	{
 		Renderer = GetComponentInChildren<SpriteRenderer>();
-
-		if (mLightRendererObject == null)
+		//Do not replace with null coalescing operator due to custom unity null comparator
+		if(lightRendererObject == null)
 		{
-			mLightRendererObject = LightSpriteBuilder.BuildDefault(gameObject, new Color(0, 0, 0, 0), 12);
+			lightRendererObject = LightSpriteBuilder.BuildDefault(gameObject, iSize: 12);
 		}
-
-		State = InitialState;
-
 		ExtractLightSprites();
-	}
-
-	void Start()
-	{
-		Color _color;
-
-		if (customColor == new Color(0, 0, 0, 0))
-		{
-			_color = new Color(0.7264151f, 0.7264151f, 0.7264151f, 0.8f);
-		}
-		else
-		{
-			_color = customColor;
-		}
-
-		mLightRendererObject.GetComponent<LightSprite>().Color = _color;
 	}
 
 	private void ExtractLightSprites()
@@ -248,70 +91,198 @@ public class LightSource : ObjectTrigger
 
 		const int SheetSpacing = 4;
 
-		var _assignedSprite = Renderer.sprite;
+		var sprite = Renderer.sprite;
 
-		if (_assignedSprite == null)
+		if (sprite == null)
 		{
-			Logger.LogError("LightSource: Unable to extract light source state sprites from SpriteSheet. Operation requires Renderer.sprite to be assigned in inspector.", Category.Lighting);
+			Logger.LogError(
+				"LightSource: Unable to extract light source state sprites from SpriteSheet. " +
+				"Operation requires Renderer.sprite to be assigned in inspector.", Category.Lighting);
 			return;
 		}
 
 		// Try to parse base sprite index.
-		string[] _splitedName = _assignedSprite.name.Split('_');
-		var _spriteSheet = SpriteManager.LightSprites["lights"];
+		var splitName = sprite.name.Split('_');
+		var spriteSheet = SpriteManager.LightSprites["lights"];
 
-		int _baseIndex;
-		if (_spriteSheet != null && _splitedName.Length == 2 && int.TryParse(_splitedName[1], out _baseIndex))
+		spriteStates.Add(LightState.On, sprite);
+
+		if (spriteSheet?.Length == 2 &&
+			int.TryParse(splitName[1], out var baseIndex))
 		{
-			Func<int, Sprite> ExtractSprite = delegate(int iIndex)
-			{
-				if (iIndex >= 0 && iIndex < _spriteSheet.Length)
-					return _spriteSheet[iIndex];
-
-				return null;
-			};
-
 			// Extract sprites from sprite sheet based on spacing from base index.
-			mSpriteDictionary.Add(LightState.On, _assignedSprite);
-			mSpriteDictionary.Add(LightState.Off, ExtractSprite(_baseIndex + SheetSpacing));
-			mSpriteDictionary.Add(LightState.MissingBulb, ExtractSprite(_baseIndex + (SheetSpacing * 2)));
-			mSpriteDictionary.Add(LightState.Dirty, ExtractSprite(_baseIndex + (SheetSpacing * 3)));
-			mSpriteDictionary.Add(LightState.Broken, ExtractSprite(_baseIndex + (SheetSpacing * 4)));
+			spriteStates.Add(LightState.Off        , GetSprite(1));
+			spriteStates.Add(LightState.MissingBulb, GetSprite(2));
+			spriteStates.Add(LightState.Dirty      , GetSprite(3));
+			spriteStates.Add(LightState.Broken     , GetSprite(4));
 		}
-		else
+
+		Sprite GetSprite(int index)
 		{
-			mSpriteDictionary.Add(LightState.On, _assignedSprite);
+			return (index >= 0 && index < spriteSheet.Length) ?
+				spriteSheet[baseIndex + SheetSpacing * index] :
+				null;
 		}
 	}
 
-	// Handle sync failure.
-	private IEnumerator WaitToTryAgain()
+	void Start()
 	{
-		yield return new WaitForSeconds(0.2f);
+		lightRendererObject.GetComponent<LightSprite>().Color =
+			customColor == default ?
+			new Color(0.7264151f, 0.7264151f, 0.7264151f, 0.8f) :
+			customColor;
+	}
+
+	public override void Trigger(bool state)
+	{
+		On = state;
+		if (!retrying && Renderer == null)
+		{
+			StartCoroutine(Retry(state));
+		}
+	}
+
+	public void Received(LightSwitchData Received)
+	{
+		if (retrying) return;
+		if (Received.LightSwitchTrigger != RelatedLightSwitchTrigger &&
+			RelatedLightSwitchTrigger != null)
+		{
+			return;
+		}
+
+		RelatedLightSwitchTrigger = RelatedLightSwitchTrigger ?? Received.LightSwitchTrigger;
+		RelatedAPC = Received.RelatedAPC ?? RelatedAPC;
+
+		if (On)
+		{
+			if (Received.RelatedAPC != null)
+			{
+				EnsureContains(RelatedAPC.ConnectedSwitchesAndLights[RelatedLightSwitchTrigger], this);
+			}
+			else if (RelatedLightSwitchTrigger.SelfPowered)
+			{
+				EnsureContains(RelatedLightSwitchTrigger.SelfPowerLights, this);
+			}
+		}
+
 		if (Renderer == null)
 		{
-			Renderer = GetComponentInChildren<SpriteRenderer>();
-			if (Renderer != null)
-			{
-				State = tempStateCache ? LightState.On : LightState.Off;
-				if (mLightRendererObject != null)
-				{
-					mLightRendererObject.SetActive(tempStateCache);
-				}
-			}
-			else
-			{
-				Logger.LogWarning("LightSource still failing Renderer sync", Category.Lighting);
-			}
+			StartCoroutine(Retry(Received.state));
 		}
 		else
 		{
-			State = tempStateCache ? LightState.On : LightState.Off;
-			if (mLightRendererObject != null)
+			On = Received.state;
+		}
+	}
+
+	public void EmergencyLight(LightSwitchData Received)
+	{
+		if (gameObject.tag == "EmergencyLight")
+		{
+			var eLightAnim = gameObject.GetComponent<EmergencyLightAnimator>();
+
+			if (eLightAnim != null)
 			{
-				mLightRendererObject.SetActive(tempStateCache);
+				EnsureContains(Received.RelatedAPC.ConnectedEmergencyLights, eLightAnim);
 			}
 		}
-		waitToCheckState = false;
+	}
+
+	private void OnIntensityChange()
+	{
+		if (On)
+		{
+			GetComponentInChildren<LightSprite>().Color.a = Intensity;
+		}
+	}
+
+	private void OnStateChange(LightState iValue)
+	{
+		// Assign state appropriate sprite to the LightSourceObject.
+		if (spriteStates.Any())
+		{
+			Renderer.sprite = spriteStates.ContainsKey(iValue) ?
+				spriteStates[iValue] :
+				spriteStates.Values.First();
+		}
+
+		// Switch Light renderer.
+		if (lightRendererObject != null)
+		{
+			lightRendererObject.SetActive(iValue == LightState.On);
+		}
+	}
+
+	public void PowerLightIntensityUpdate(float Voltage)
+	{
+		if (On)
+		{
+			// Intensity clamped between 0 and 1, and sprite updated automatically with custom get set
+			Intensity = Voltage / FullIntensityVoltage;
+		}
+	}
+
+	/// <summary>
+	/// Handle sync failure
+	/// </summary>
+	private IEnumerator Retry(bool state)
+	{
+		const float RetryAttempts = 2;
+		retrying = true;
+
+		for (int i = 0; i < RetryAttempts; i++)
+		{
+			if (TryUpdateLight(state))
+			{
+				retrying = false;
+				yield break;
+			}
+			yield return new WaitForSeconds(0.2f);
+		}
+
+		Logger.LogWarning("LightSource still failing Renderer sync", Category.Lighting);
+
+		retrying = false;
+	}
+
+	private bool TryUpdateLight(bool state)
+	{
+		Renderer = GetComponentInChildren<SpriteRenderer>();
+		if (Renderer == null) return false;
+		On = state;
+
+		if (lightRendererObject != null)
+		{
+			//If the activeSelf is different from what it would be set to, set it
+			if (lightRendererObject.activeSelf ^ On)
+			{
+				lightRendererObject.SetActive(On);
+			}
+		}
+
+		return true;
+	}
+
+	private static void EnsureContains<T>(ICollection<T> collection, T item)
+	{
+		if (!collection.Contains(item))
+		{
+			collection.Add(item);
+		}
+	}
+
+	// Note: Judging the "lighting" sprite sheet it seems that light source can have many disabled states.
+	// At this point i just want to do a basic setup for an obvious extension, so only On / Off states are actually implemented
+	// and for other states is just a state and sprite assignment.
+	enum LightState
+	{
+		None = 0,
+		On,
+		Off,
+		// Placeholder states, i assume naming would change.
+		MissingBulb,
+		Dirty,
+		Broken,
 	}
 }
