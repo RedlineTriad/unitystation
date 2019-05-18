@@ -210,7 +210,7 @@ public class GUI_APC : NetTab
 	private void CalculateMaxCapacity()
 	{
 		float newCapacity = 0;
-		foreach (DepartmentBattery battery in LocalAPC.ConnectedDepartmentBatteries)
+		foreach (DepartmentBattery battery in LocalAPC.connectedDepartmentBatteries)
 		{
 			newCapacity += battery.BatterySupplyingModule.CapacityMax;
 		}
@@ -226,7 +226,7 @@ public class GUI_APC : NetTab
 		}
 
 		float newCapacity = 0;
-		foreach (DepartmentBattery battery in LocalAPC.ConnectedDepartmentBatteries)
+		foreach (DepartmentBattery battery in LocalAPC.connectedDepartmentBatteries)
 		{
 			newCapacity += battery.BatterySupplyingModule.CurrentCapacity;
 		}
@@ -265,8 +265,8 @@ public class GUI_APC : NetTab
 			Logger.LogTrace("Updating APC display", Category.NetUI);
 			// Display the electrical values using engineering notation
 			string voltage = LocalAPC.Voltage.ToEngineering("V");
-			string current = LocalAPC.Current.ToEngineering("A");
-			string power = (LocalAPC.Voltage * LocalAPC.Current).ToEngineering("W");
+			string current = LocalAPC.current.ToEngineering("A");
+			string power = (LocalAPC.Voltage * LocalAPC.current).ToEngineering("W");
 			ElectricalValues.SetValue = $"{voltage}\n{current}\n{power}";
 			StatusText.SetValue = LocalAPC.State.ToString();
 			ChargePercentage.SetValue = CalculateChargePercentage();

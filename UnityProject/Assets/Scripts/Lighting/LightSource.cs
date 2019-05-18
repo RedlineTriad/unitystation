@@ -158,7 +158,7 @@ public class LightSource : ObjectTrigger
 		{
 			if (Received.RelatedAPC != null)
 			{
-				EnsureContains(RelatedAPC.ConnectedSwitchesAndLights[RelatedLightSwitchTrigger], this);
+				EnsureContains(RelatedAPC.connectedSwitchesAndLights[RelatedLightSwitchTrigger], this);
 			}
 			else if (RelatedLightSwitchTrigger.SelfPowered)
 			{
@@ -184,7 +184,7 @@ public class LightSource : ObjectTrigger
 
 			if (eLightAnim != null)
 			{
-				EnsureContains(Received.RelatedAPC.ConnectedEmergencyLights, eLightAnim);
+				EnsureContains(Received.RelatedAPC.connectedEmergencyLights, eLightAnim);
 			}
 		}
 	}

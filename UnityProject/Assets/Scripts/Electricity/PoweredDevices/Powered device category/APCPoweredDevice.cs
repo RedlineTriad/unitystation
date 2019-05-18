@@ -20,10 +20,10 @@ public class APCPoweredDevice : MonoBehaviour
 			RelatedAPC = APC;
 			if (IsEnvironmentalDevice)
 			{
-				RelatedAPC.EnvironmentalDevices.Add(this);
+				RelatedAPC.environmentalDevices.Add(this);
 			}
 			else { 
-				RelatedAPC.ConnectedDevices.Add(this);
+				RelatedAPC.connectedDevices.Add(this);
 			}
 		}
 	}

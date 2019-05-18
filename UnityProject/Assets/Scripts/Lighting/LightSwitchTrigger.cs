@@ -55,7 +55,7 @@ public class LightSwitchTrigger : InputTrigger
 		DetectLightsAndAction(true);
 		if (RelatedAPC != null)
 		{
-			RelatedAPC.ConnectedSwitchesAndLights[this] = new List<LightSource>();
+			RelatedAPC.connectedSwitchesAndLights[this] = new List<LightSource>();
 		}
 		if (SelfPowered) {
 			for (int i = 0; i < SelfPowerLights.Count; i++)
