@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.Serialization;
 
 [RequireComponent(typeof(APCInteract))]
 public class APC : InputTrigger, INodeControl
@@ -10,13 +11,13 @@ public class APC : InputTrigger, INodeControl
 	public bool powerMachinery = true;
 	public bool powerLights = true;
 	public bool powerEnvironment = true;
-	public int connectedDevicesCache = 0;
+    public bool batteryCharging = false;
+    public int connectedDevicesCache = 0;
 	public float current;
 	public NetTabType netTabType;
 
-	public ElectricalNodeControl electricalNodeControl;
-
-	public ResistanceSourceModule resistanceSourceModule;
+	[SerializeField] public ElectricalNodeControl ElectricalNodeControl;
+	[SerializeField] public ResistanceSourceModule ResistanceSourceModule;
 
 	/// <summary>
 	/// Holds information about wire connections to this APC
@@ -37,19 +38,7 @@ public class APC : InputTrigger, INodeControl
 		{
 			if (value == voltage) return;
 			voltage = value;
-			OnVoltageChange();
 		}
-	}
-
-	private void OnVoltageChange()
-	{
-		// Determine the state of the APC using the voltage
-		// Changing State will trigger OnStateChange to handle it
-		State =
-			Voltage > 219 ? APCState.Full :
-			Voltage > 40 ? APCState.Charging :
-			Voltage > 0 ? APCState.Critical :
-			APCState.Dead;
 	}
 
 	/// <summary>
@@ -62,7 +51,7 @@ public class APC : InputTrigger, INodeControl
 
 	public void PowerNetworkUpdate()
 	{
-		var nodeData = electricalNodeControl.Node.Data;
+		var nodeData = ElectricalNodeControl.Node.Data;
 		var RTCD = nodeData.ResistanceToConnectedDevices;
 		if (connectedDevicesCache == RTCD.Count)
 		{
@@ -87,12 +76,24 @@ public class APC : InputTrigger, INodeControl
 		Voltage = nodeData.ActualVoltage;
 		current = nodeData.CurrentInWire;
 		HandleDevices();
+		UpdateDisplay();
 	}
 
-	/// <summary>
-	/// Change brightness of lights connected to this APC proportionally to voltage
-	/// </summary>
-	public void HandleDevices()
+	private void UpdateDisplay()
+    {
+        // Determine the state of the APC using the voltage
+        State =
+            batteryCharging ? APCState.Charging :
+            Voltage > 219 ? APCState.Full :
+            Voltage > 40 ? APCState.Charging :
+            Voltage > 0 ? APCState.Critical :
+            APCState.Dead;
+    }
+
+    /// <summary>
+    /// Change brightness of lights connected to this APC proportionally to voltage
+    /// </summary>
+    public void HandleDevices()
 	{
 		//Lights
 		float Voltages = Voltage > 270 ? 0.001f : Voltage;
@@ -101,7 +102,7 @@ public class APC : InputTrigger, INodeControl
 		CalculatingResistance += HandleLights(powerLights ? (float?)Voltages : null);
 		CalculatingResistance += HandleMachinery(powerMachinery ? (float?)Voltages : null);
 		CalculatingResistance += HandleEnviroment(powerEnvironment ? (float?)Voltages : null);
-		resistanceSourceModule.Resistance = (1 / CalculatingResistance);
+		ResistanceSourceModule.Resistance = (1 / CalculatingResistance);
 	}
 
 	private float HandleLights(float? Voltages)
